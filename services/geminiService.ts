@@ -29,23 +29,65 @@ const responseSchema = {
 };
 
 /**
- * Trích xuất nội dung từ URL (YouTube, Blog, Website) sử dụng Google Search Grounding
- * Sử dụng Gemini 3 Pro để tối ưu hóa khả năng sử dụng công cụ tìm kiếm.
+ * Trích xuất ID video từ URL YouTube
  */
-export const extractContentFromUrl = async (url: string): Promise<string> => {
+const getYoutubeVideoId = (url: string): string | null => {
+  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[7].length === 11) ? match[7] : null;
+};
+
+/**
+ * Lấy thông tin video cơ bản từ YouTube Data API nếu có API Key
+ */
+const fetchYoutubeMetadata = async (url: string, apiKey: string): Promise<{title: string, description: string} | null> => {
+  const videoId = getYoutubeVideoId(url);
+  if (!videoId || !apiKey) return null;
+
+  try {
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`);
+    const data = await response.json();
+    if (data.items && data.items.length > 0) {
+      return {
+        title: data.items[0].snippet.title,
+        description: data.items[0].snippet.description
+      };
+    }
+  } catch (error) {
+    console.error("Lỗi khi gọi YouTube API:", error);
+  }
+  return null;
+};
+
+/**
+ * Trích xuất nội dung từ URL (YouTube, Blog, Website) sử dụng Google Search Grounding
+ */
+export const extractContentFromUrl = async (url: string, ytApiKey?: string): Promise<string> => {
   try {
     const ai = getAIClient();
+    
+    // Thử lấy thêm context từ YouTube API nếu là link YouTube
+    let contextInfo = "";
+    if (url.includes('youtube.com') || url.includes('youtu.be')) {
+      if (ytApiKey) {
+        const metadata = await fetchYoutubeMetadata(url, ytApiKey);
+        if (metadata) {
+          contextInfo = `\nTHÔNG TIN VIDEO TỪ API:\nTiêu đề: ${metadata.title}\nMô tả: ${metadata.description.slice(0, 500)}...`;
+        }
+      }
+    }
+
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview", // Nâng cấp lên Pro để có khả năng Search tốt hơn
-      contents: `Bạn là một chuyên gia trích xuất dữ liệu. 
-      NHIỆM VỤ: Hãy truy cập và đọc nội dung của liên kết này: ${url}
+      model: "gemini-3-pro-preview",
+      contents: `Bạn là một chuyên gia trích xuất kịch bản và nội dung số. 
+      NHIỆM VỤ: Hãy trích xuất toàn bộ nội dung hoặc bản ghi lời thoại (transcript) từ liên kết: ${url}
+      ${contextInfo}
       
       HƯỚNG DẪN CHI TIẾT:
-      1. Nếu là video YouTube: Hãy tìm kiếm bản ghi lời thoại (transcript) hoặc mô tả chi tiết nội dung video. 
-      2. Nếu là bài viết/blog: Hãy trích xuất toàn bộ nội dung văn bản chính.
-      3. Bạn CẦN sử dụng công cụ Google Search để lấy dữ liệu mới nhất nếu không thể truy cập trực tiếp.
-      4. Chỉ trả về nội dung văn bản thuần túy (Plain Text), không thêm lời dẫn hay giải thích.
-      5. Nếu video có giới hạn hoặc không có transcript công khai, hãy tóm tắt nội dung dựa trên dữ liệu tìm kiếm được từ tiêu đề và mô tả video.`,
+      1. SỬ DỤNG GOOGLE SEARCH: Nếu không thể truy cập trực tiếp URL, hãy dùng công cụ Tìm kiếm để tìm "transcript" hoặc "lyrics" hoặc "full text" của video/bài viết này trên các trang web bên thứ ba (như youtubetranscript.com, các blog review, v.v.).
+      2. NẾU LÀ VIDEO: Hãy tìm kịch bản chính xác nhất. Nếu không tìm thấy transcript, hãy dựa vào tiêu đề và mô tả video để tạo ra một bản tóm tắt nội dung cực kỳ chi tiết (ít nhất 500 từ).
+      3. CHẤT LƯỢNG: Ưu tiên trả về nội dung lời thoại đầy đủ nếu có thể.
+      4. ĐỊNH DẠNG: Chỉ trả về nội dung văn bản chính, không thêm lời dẫn của AI.`,
       config: {
         tools: [{ googleSearch: {} }],
         temperature: 0.1,
@@ -54,15 +96,19 @@ export const extractContentFromUrl = async (url: string): Promise<string> => {
 
     const extractedText = response.text;
     
-    if (!extractedText || extractedText.length < 50) {
-       throw new Error("Nội dung trích xuất quá ngắn hoặc không khả dụng.");
+    if (!extractedText || extractedText.length < 100) {
+       throw new Error("Nội dung trích xuất quá ngắn hoặc không khả dụng để phân tích.");
     }
 
     return extractedText;
   } catch (error: any) {
     console.error("Error extracting content from URL:", error);
-    // Cung cấp thông báo lỗi chi tiết hơn để người dùng biết cách xử lý
-    throw new Error(`[Lỗi Trích Xuất]: AI không thể tự động lấy dữ liệu từ link này do hạn chế của trang web hoặc chính sách bảo mật của YouTube. \n\nCÁCH KHẮC PHỤC:\n1. Hãy dán trực tiếp kịch bản (transcript) vào ô văn bản.\n2. Kiểm tra xem video có bản phụ đề (CC) công khai không.`);
+    throw new Error(`[Lỗi Trích Xuất]: Hệ thống không thể tự động lấy bản ghi từ YouTube (có thể do video chặn bot hoặc chạy trên GitHub Pages bị giới hạn).
+    
+CÁCH KHẮC PHỤC HIỆU QUẢ NHẤT:
+1. Mở video YouTube, nhấn vào biểu tượng "..." (Thêm) -> "Hiển thị bản ghi lời thoại" (Show transcript).
+2. Sao chép toàn bộ văn bản đó và dán trực tiếp vào ô nhập liệu bên trên.
+3. Nhấn "Bắt đầu phân tích" để tiếp tục.`);
   }
 };
 

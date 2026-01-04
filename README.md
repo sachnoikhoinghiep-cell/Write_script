@@ -4,7 +4,7 @@
  Một ứng dụng mạnh mẽ sử dụng trí tuệ nhân tạo (Gemini API) để phân tích bản ghi video YouTube, trích xuất chủ đề, dịch thuật, viết kịch bản motivational và tạo hình ảnh AI tự động.
 
  ## Phiên Bản Hiện Tại
- `PH.v.003.04.01.2026`
+ `PH.v.004.04.01.2026`
 
  ## Tính Năng Chính
  - **Phân tích thông minh**: Trích xuất chủ đề chính và các điểm cốt lõi từ transcript hoặc URL.

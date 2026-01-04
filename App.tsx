@@ -129,7 +129,8 @@ const App: React.FC = () => {
       if (isUrl(transcript)) {
         setLoadingMessage('Đang cố gắng trích xuất nội dung từ liên kết...');
         try {
-          contentToAnalyze = await extractContentFromUrl(transcript.trim());
+          // Truyền youtubeApiKey để hỗ trợ trích xuất tốt hơn
+          contentToAnalyze = await extractContentFromUrl(transcript.trim(), isYoutubeApiValidated ? youtubeApiKey : undefined);
         } catch (extractErr: any) {
           // Nếu trích xuất tự động thất bại, hiển thị lỗi rõ ràng hơn
           setError(extractErr.message);
@@ -148,7 +149,7 @@ const App: React.FC = () => {
       setIsLoading(false);
       setLoadingMessage('Đang phân tích...');
     }
-  }, [transcript, isYoutubeUrl, isYoutubeApiValidated, isUrl]);
+  }, [transcript, isYoutubeUrl, isYoutubeApiValidated, isUrl, youtubeApiKey]);
 
   const handleTranslate = useCallback(async () => {
     if (!result) return;
