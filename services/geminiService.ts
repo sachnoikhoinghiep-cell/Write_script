@@ -3,7 +3,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import type { AnalysisResult, SEOResult } from '../types';
 
 const getAIClient = () => {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const apiKey = process.env.API_KEY;
   if (!apiKey) {
     throw new Error("API Key chưa được cấu hình trong môi trường hệ thống.");
   }
@@ -26,6 +26,47 @@ const responseSchema = {
     },
   },
   required: ['topic', 'keyPoints'],
+};
+
+/**
+ * Tạo hình ảnh thumbnail từ prompt
+ */
+export const generateThumbnailImage = async (
+  prompt: string,
+  model: 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview',
+  aspectRatio: "1:1" | "3:4" | "4:3" | "9:16" | "16:9" = "16:9",
+  imageSize?: "1K" | "2K" | "4K"
+): Promise<string> => {
+  try {
+    const ai = getAIClient();
+    const config: any = {
+      imageConfig: {
+        aspectRatio,
+      }
+    };
+
+    if (model === 'gemini-3-pro-image-preview' && imageSize) {
+      config.imageConfig.imageSize = imageSize;
+    }
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: {
+        parts: [{ text: prompt }],
+      },
+      config,
+    });
+
+    for (const part of response.candidates[0].content.parts) {
+      if (part.inlineData) {
+        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
+    }
+    throw new Error("Không tìm thấy dữ liệu hình ảnh trong phản hồi.");
+  } catch (error) {
+    console.error("Error generating image:", error);
+    throw error;
+  }
 };
 
 /**

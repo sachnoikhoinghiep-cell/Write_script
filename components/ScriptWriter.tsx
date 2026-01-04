@@ -1,8 +1,9 @@
 
 import React, { useState, useCallback } from 'react';
-import { generateScript, translateStory, generateImagePrompts, generateSEOMetadata } from '../services/geminiService';
+import JSZip from 'jszip';
+import { generateScript, translateStory, generateImagePrompts, generateSEOMetadata, generateThumbnailImage } from '../services/geminiService';
 import type { AnalysisResult, SEOResult } from '../types';
-import { BackIcon, KeyPointIcon, ScriptIcon, TranslateIcon, BrushIcon, SEOIcon } from './icons';
+import { BackIcon, KeyPointIcon, ScriptIcon, TranslateIcon, BrushIcon, SEOIcon, CheckIcon, CopyIcon } from './icons';
 import { LoadingSpinner } from './LoadingSpinner';
 import { ErrorDisplay } from './ErrorDisplay';
 import { CopyButton } from './CopyButton';
@@ -53,6 +54,24 @@ export const ScriptWriter: React.FC<ScriptWriterProps> = ({ input, onBack }) => 
   const [isGeneratingSEO, setIsGeneratingSEO] = useState<boolean>(false);
   const [seoError, setSeoError] = useState<string | null>(null);
 
+  // Image Generation States (Thumbnail)
+  const [generatedThumbnailUrl, setGeneratedThumbnailUrl] = useState<string | null>(null);
+  const [isGeneratingThumbnailImage, setIsGeneratingThumbnailImage] = useState<boolean>(false);
+  const [thumbnailImageError, setThumbnailImageError] = useState<string | null>(null);
+  
+  const [imageModel, setImageModel] = useState<'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview'>('gemini-2.5-flash-image');
+  const [imageSize, setImageSize] = useState<'1K' | '2K' | '4K'>('1K');
+  const [aspectRatio, setAspectRatio] = useState<"1:1" | "3:4" | "4:3" | "9:16" | "16:9">("16:9");
+  const [selectedThumbnailText, setSelectedThumbnailText] = useState<string>('');
+
+  // Story Images States (Generate All)
+  const [generatedStoryImages, setGeneratedStoryImages] = useState<(string | null)[]>([]);
+  const [isGeneratingAllImages, setIsGeneratingAllImages] = useState<boolean>(false);
+  const [isDownloadingAll, setIsDownloadingAll] = useState<boolean>(false);
+  const [allImagesError, setAllImagesError] = useState<string | null>(null);
+  const [showAllImagesConfig, setShowAllImagesConfig] = useState<boolean>(false);
+  const [generationProgress, setGenerationProgress] = useState<{current: number, total: number}>({current: 0, total: 0});
+
   const handleGenerate = useCallback(async () => {
     setIsLoading(true);
     setError(null);
@@ -63,6 +82,9 @@ export const ScriptWriter: React.FC<ScriptWriterProps> = ({ input, onBack }) => 
     setPromptsError(null);
     setSeoResult(null);
     setSeoError(null);
+    setGeneratedThumbnailUrl(null);
+    setSelectedThumbnailText('');
+    setGeneratedStoryImages([]);
     try {
       const generatedParts = await generateScript(result, duration, numberOfParts, language);
       setScriptParts(generatedParts);
@@ -81,6 +103,9 @@ export const ScriptWriter: React.FC<ScriptWriterProps> = ({ input, onBack }) => 
     setTranslatedScriptParts(null);
     setImagePrompts(null);
     setSeoResult(null);
+    setGeneratedThumbnailUrl(null);
+    setSelectedThumbnailText('');
+    setGeneratedStoryImages([]);
     try {
       const translation = await translateStory(scriptParts, storyTargetLanguage);
       setTranslatedScriptParts(translation);
@@ -96,6 +121,7 @@ export const ScriptWriter: React.FC<ScriptWriterProps> = ({ input, onBack }) => 
     if (!translatedScriptParts) return;
     setIsGeneratingPrompts(true);
     setPromptsError(null);
+    setGeneratedStoryImages([]);
     try {
       const prompts = await generateImagePrompts(translatedScriptParts, selectedStyle);
       setImagePrompts(prompts);
@@ -111,6 +137,8 @@ export const ScriptWriter: React.FC<ScriptWriterProps> = ({ input, onBack }) => 
     if (!translatedScriptParts) return;
     setIsGeneratingSEO(true);
     setSeoError(null);
+    setGeneratedThumbnailUrl(null);
+    setSelectedThumbnailText('');
     try {
       const metadata = await generateSEOMetadata(translatedScriptParts.join('\n\n'), result.topic, selectedStyle);
       setSeoResult(metadata);
@@ -121,6 +149,117 @@ export const ScriptWriter: React.FC<ScriptWriterProps> = ({ input, onBack }) => 
       setIsGeneratingSEO(false);
     }
   }, [translatedScriptParts, result.topic, selectedStyle]);
+
+  const handleGenerateThumbnailImage = useCallback(async () => {
+    if (!seoResult) return;
+    
+    if (imageModel === 'gemini-3-pro-image-preview') {
+      if (typeof window.aistudio?.hasSelectedApiKey === 'function') {
+        const hasKey = await window.aistudio.hasSelectedApiKey();
+        if (!hasKey) {
+          await window.aistudio.openSelectKey();
+        }
+      }
+    }
+
+    setIsGeneratingThumbnailImage(true);
+    setThumbnailImageError(null);
+    setGeneratedThumbnailUrl(null);
+
+    let finalPrompt = seoResult.thumbnailPrompt;
+    if (selectedThumbnailText) {
+      finalPrompt += `. Add the text "${selectedThumbnailText}" in a high-impact, bold, cinematic font as a central element of the image. The text should be clearly readable and integrated into the ${selectedStyle} aesthetic.`;
+    }
+
+    try {
+      const url = await generateThumbnailImage(finalPrompt, imageModel, aspectRatio, imageSize);
+      setGeneratedThumbnailUrl(url);
+    } catch (err: any) {
+      console.error(err);
+      setThumbnailImageError('Không thể tạo hình ảnh thumbnail. Vui lòng thử lại.');
+    } finally {
+      setIsGeneratingThumbnailImage(false);
+    }
+  }, [seoResult, imageModel, aspectRatio, imageSize, selectedThumbnailText, selectedStyle]);
+
+  const handleGenerateAllImages = useCallback(async () => {
+    if (!imagePrompts || imagePrompts.length === 0) return;
+
+    if (imageModel === 'gemini-3-pro-image-preview') {
+        if (typeof window.aistudio?.hasSelectedApiKey === 'function') {
+            const hasKey = await window.aistudio.hasSelectedApiKey();
+            if (!hasKey) {
+                await window.aistudio.openSelectKey();
+            }
+        }
+    }
+
+    setIsGeneratingAllImages(true);
+    setAllImagesError(null);
+    const newImages = new Array(imagePrompts.length).fill(null);
+    setGeneratedStoryImages(newImages);
+    setGenerationProgress({current: 0, total: imagePrompts.length});
+    setShowAllImagesConfig(false);
+
+    try {
+        for (let i = 0; i < imagePrompts.length; i++) {
+            setGenerationProgress(prev => ({...prev, current: i + 1}));
+            try {
+                const url = await generateThumbnailImage(imagePrompts[i], imageModel, aspectRatio, imageSize);
+                newImages[i] = url;
+                setGeneratedStoryImages([...newImages]);
+            } catch (err) {
+                console.error(`Error generating image ${i}:`, err);
+            }
+        }
+    } catch (err: any) {
+        setAllImagesError("Quá trình tạo ảnh bị gián đoạn. Một số ảnh có thể chưa được tạo.");
+    } finally {
+        setIsGeneratingAllImages(false);
+    }
+  }, [imagePrompts, imageModel, aspectRatio, imageSize]);
+
+  const handleDownloadAllImages = useCallback(async () => {
+    const validImageData = generatedStoryImages
+      .map((url, index) => ({ url, index: index + 1 }))
+      .filter(item => item.url !== null);
+
+    if (validImageData.length === 0) return;
+
+    setIsDownloadingAll(true);
+    try {
+      const zip = new JSZip();
+      
+      for (const item of validImageData) {
+        // Trích xuất dữ liệu base64 từ data URL
+        const base64Data = item.url!.split(',')[1];
+        // Đặt tên theo số thứ tự prompt: story-image-1.png, story-image-2.png...
+        zip.file(`story-image-${item.index}.png`, base64Data, { base64: true });
+      }
+
+      // Generate ZIP file with STORE compression (no compression) to maintain quality
+      const zipContent = await zip.generateAsync({ 
+        type: 'blob', 
+        compression: 'STORE' 
+      });
+
+      const downloadUrl = URL.createObjectURL(zipContent);
+      const link = document.createElement('a');
+      link.href = downloadUrl;
+      // Đặt tên file ZIP theo chủ đề (slugify)
+      const fileName = result.topic.toLowerCase().slice(0, 30).replace(/[^a-z0-9]/g, '_') || 'story_images';
+      link.download = `${fileName}_images.zip`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(downloadUrl);
+    } catch (err) {
+      console.error("Error creating ZIP:", err);
+      alert("Đã xảy ra lỗi khi tạo file ZIP.");
+    } finally {
+      setIsDownloadingAll(false);
+    }
+  }, [generatedStoryImages, result.topic]);
 
   const handleCopyAllSEO = useCallback(() => {
     if (!seoResult) return;
@@ -140,6 +279,7 @@ ${seoResult.keywords}
 --- THUMBNAIL PROMPT (AI IMAGE) ---
 Phong cách: ${selectedStyle}
 Prompt: ${seoResult.thumbnailPrompt}
+Chữ đã chọn: ${selectedThumbnailText || 'Không chọn'}
 
 --- GỢI Ý CHỮ TRÊN THUMBNAIL ---
 ${seoResult.thumbnailTextIdeas.map(idea => `- ${idea}`).join('\n')}
@@ -148,7 +288,7 @@ ${seoResult.thumbnailTextIdeas.map(idea => `- ${idea}`).join('\n')}
     navigator.clipboard.writeText(fullText).then(() => {
       alert('Đã sao chép toàn bộ nội dung SEO vào clipboard!');
     });
-  }, [seoResult, selectedStyle]);
+  }, [seoResult, selectedStyle, selectedThumbnailText]);
 
   const calculateTotalWords = (parts: string[] | null) => {
       if (!parts) return 0;
@@ -405,30 +545,160 @@ ${seoResult.thumbnailTextIdeas.map(idea => `- ${idea}`).join('\n')}
                                             <h2 className="text-2xl font-bold text-emerald-400">Prompts Hình Ảnh</h2>
                                             <p className="text-sm text-slate-500 mt-1 italic">Phong cách: {selectedStyle}</p>
                                         </div>
-                                        <button
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(imagePrompts.join('\n\n')).then(() => {
-                                                    alert('Đã sao chép tất cả prompt!');
-                                                });
-                                            }}
-                                            className="inline-flex items-center gap-2 px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-full transition-all shadow-lg hover:shadow-emerald-500/20"
-                                        >
-                                            <ScriptIcon />
-                                            Sao Chép Toàn Bộ Prompt
-                                        </button>
+                                        <div className="flex flex-wrap justify-end gap-3">
+                                            <button
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(imagePrompts.join('\n\n')).then(() => {
+                                                        alert('Đã sao chép tất cả prompt!');
+                                                    });
+                                                }}
+                                                className="inline-flex items-center gap-2 px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white text-sm font-bold rounded-full transition-all"
+                                            >
+                                                <CopyIcon />
+                                                Sao Chép Toàn Bộ Prompt
+                                            </button>
+                                            <button
+                                                onClick={() => setShowAllImagesConfig(!showAllImagesConfig)}
+                                                className="inline-flex items-center gap-2 px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-full transition-all shadow-lg hover:shadow-emerald-500/20"
+                                            >
+                                                <BrushIcon />
+                                                Tạo Ảnh Toàn Bộ
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    {/* Config Section for Generate All */}
+                                    {showAllImagesConfig && (
+                                        <div className="mb-8 p-6 bg-slate-800/60 rounded-xl border border-emerald-500/30 animate-fade-in">
+                                            <h3 className="text-emerald-400 font-bold mb-4 uppercase text-xs tracking-widest">Cấu hình tạo ảnh hàng loạt</h3>
+                                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-6">
+                                                <div>
+                                                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Model</label>
+                                                  <select
+                                                    value={imageModel}
+                                                    onChange={(e) => setImageModel(e.target.value as any)}
+                                                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                  >
+                                                    <option value="gemini-2.5-flash-image">Gemini Flash (Nhanh)</option>
+                                                    <option value="gemini-3-pro-image-preview">Gemini Pro (Chất lượng cao)</option>
+                                                  </select>
+                                                </div>
+                                                <div>
+                                                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Kích Thước</label>
+                                                  <select
+                                                    value={imageSize}
+                                                    onChange={(e) => setImageSize(e.target.value as any)}
+                                                    disabled={imageModel !== 'gemini-3-pro-image-preview'}
+                                                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 outline-none disabled:opacity-30"
+                                                  >
+                                                    <option value="1K">1K (1024x1024+)</option>
+                                                    <option value="2K">2K (2048x2048+)</option>
+                                                    <option value="4K">4K (Siêu nét)</option>
+                                                  </select>
+                                                </div>
+                                                <div>
+                                                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Tỷ Lệ</label>
+                                                  <select
+                                                    value={aspectRatio}
+                                                    onChange={(e) => setAspectRatio(e.target.value as any)}
+                                                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 outline-none"
+                                                  >
+                                                    <option value="16:9">16:9 (YouTube)</option>
+                                                    <option value="9:16">9:16 (Shorts/TikTok)</option>
+                                                    <option value="1:1">1:1 (Square)</option>
+                                                    <option value="4:3">4:3 (Standard)</option>
+                                                    <option value="3:4">3:4 (Portrait)</option>
+                                                  </select>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-end gap-3">
+                                                <button onClick={() => setShowAllImagesConfig(false)} className="px-6 py-2 text-slate-400 text-sm font-bold">Hủy</button>
+                                                <button onClick={handleGenerateAllImages} className="px-8 py-2 bg-emerald-600 text-white text-sm font-bold rounded-lg shadow-lg">Xác Nhận Tạo {imagePrompts.length} Ảnh</button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Progress indicator */}
+                                    {isGeneratingAllImages && (
+                                        <div className="mb-8 p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <span className="text-emerald-400 font-bold text-sm">Đang tạo ảnh hàng loạt...</span>
+                                                <span className="text-slate-400 text-xs">{generationProgress.current} / {generationProgress.total}</span>
+                                            </div>
+                                            <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                                                <div 
+                                                    className="h-full bg-emerald-500 transition-all duration-300"
+                                                    style={{ width: `${(generationProgress.current / generationProgress.total) * 100}%` }}
+                                                ></div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {allImagesError && <div className="mb-6"><ErrorDisplay message={allImagesError} /><button onClick={handleGenerateAllImages} className="mt-2 w-full py-2 bg-red-600 text-white rounded-lg font-bold">Thử Tạo Lại</button></div>}
+
+                                    {/* Download All Button */}
+                                    {generatedStoryImages.some(url => url !== null) && !isGeneratingAllImages && (
+                                        <div className="mb-8 flex justify-center">
+                                            <button 
+                                                onClick={handleDownloadAllImages}
+                                                disabled={isDownloadingAll}
+                                                className="inline-flex items-center gap-3 px-8 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold rounded-xl shadow-xl hover:scale-105 transition-all disabled:opacity-50"
+                                            >
+                                                {isDownloadingAll ? (
+                                                  <span className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                                                    Đang chuẩn bị file ZIP...
+                                                  </span>
+                                                ) : (
+                                                  <>
+                                                    <CheckIcon />
+                                                    Tải Xuống Tất Cả Ảnh (.ZIP)
+                                                  </>
+                                                )}
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <div className="space-y-6">
                                         {imagePrompts.map((prompt, idx) => (
                                             <div key={idx} className="group relative">
                                                 <div className="absolute -left-4 top-0 bottom-0 w-1 bg-emerald-500/20 group-hover:bg-emerald-500/50 transition-colors"></div>
                                                 <div className="bg-slate-800/40 p-5 rounded-lg border border-slate-700 group-hover:border-emerald-500/30 transition-all">
-                                                    <div className="flex justify-between items-start gap-4">
-                                                        <p className="text-slate-200 text-base leading-relaxed font-mono select-all">
-                                                            {prompt}
-                                                        </p>
-                                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-                                                            <CopyButton textToCopy={prompt} />
+                                                    <div className="flex flex-col lg:flex-row gap-6">
+                                                        <div className="flex-grow">
+                                                            <div className="flex justify-between items-start gap-4 mb-2">
+                                                                <h4 className="text-[10px] text-emerald-500 font-bold uppercase tracking-widest">Prompt {idx + 1}</h4>
+                                                                <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                    <CopyButton textToCopy={prompt} />
+                                                                </div>
+                                                            </div>
+                                                            <p className="text-slate-200 text-sm leading-relaxed font-mono select-all italic">
+                                                                "{prompt}"
+                                                            </p>
                                                         </div>
+                                                        {generatedStoryImages[idx] && (
+                                                            <div className="lg:w-48 flex-shrink-0 animate-scale-in">
+                                                                <div className="relative group/img rounded-lg overflow-hidden border border-emerald-500/20">
+                                                                    <img 
+                                                                        src={generatedStoryImages[idx]!} 
+                                                                        alt={`Generated image ${idx + 1}`} 
+                                                                        className="w-full h-auto object-cover transition-transform group-hover/img:scale-110"
+                                                                    />
+                                                                    <a 
+                                                                        href={generatedStoryImages[idx]!} 
+                                                                        download={`story-image-${idx + 1}.png`}
+                                                                        className="absolute inset-0 bg-black/60 opacity-0 group-hover/img:opacity-100 flex items-center justify-center transition-opacity"
+                                                                    >
+                                                                        <span className="text-white text-xs font-bold px-4 py-1.5 border border-white rounded-full">Tải Ảnh</span>
+                                                                    </a>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                        {isGeneratingAllImages && !generatedStoryImages[idx] && idx === (generationProgress.current - 1) && (
+                                                            <div className="lg:w-48 h-24 lg:h-full bg-slate-900/50 rounded-lg flex items-center justify-center border border-emerald-500/10">
+                                                                <div className="w-6 h-6 border-2 border-emerald-500/20 border-t-emerald-500 rounded-full animate-spin"></div>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -522,18 +792,123 @@ ${seoResult.thumbnailTextIdeas.map(idea => `- ${idea}`).join('\n')}
                                                 <div className="p-4 bg-slate-900/80 rounded-lg border-2 border-amber-500/30 font-mono text-amber-200/90 text-sm italic select-all">
                                                     "{seoResult.thumbnailPrompt}"
                                                 </div>
-                                                <p className="text-[10px] text-slate-500 mt-2">Quy tắc: Đối tượng chính rõ nét, hậu cảnh mờ, chất lượng cao, không chữ.</p>
+                                                <p className="text-[10px] text-slate-500 mt-2">Quy tắc: Đối tượng chính rõ nét, hậu cảnh mờ, chất lượng cao, không chữ mặc định.</p>
                                             </div>
 
+                                            {/* TEXT SELECTION UI */}
                                             <div>
-                                                <h4 className="text-sm font-bold text-slate-200 mb-3 uppercase tracking-widest">Gợi Ý Chữ Trên Thumbnail (Overlay Ideas)</h4>
+                                                <h4 className="text-sm font-bold text-slate-200 mb-3 uppercase tracking-widest flex items-center gap-2">
+                                                  Gợi Ý Chữ (Chọn để thêm vào ảnh)
+                                                  {selectedThumbnailText && (
+                                                    <button 
+                                                      onClick={() => setSelectedThumbnailText('')}
+                                                      className="text-[10px] bg-slate-700 px-2 py-0.5 rounded text-slate-400 hover:text-white"
+                                                    >
+                                                      Bỏ chọn
+                                                    </button>
+                                                  )}
+                                                </h4>
                                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                                     {seoResult.thumbnailTextIdeas.map((idea, idx) => (
-                                                        <div key={idx} className="p-3 bg-slate-800 text-center rounded-lg border border-slate-700 text-amber-400 font-bold text-xs uppercase shadow-inner">
+                                                        <button 
+                                                            key={idx} 
+                                                            onClick={() => setSelectedThumbnailText(idea)}
+                                                            className={`p-3 text-center rounded-lg border transition-all font-bold text-xs uppercase shadow-inner ${
+                                                              selectedThumbnailText === idea 
+                                                                ? 'bg-amber-600 border-amber-400 text-white ring-2 ring-amber-500/50' 
+                                                                : 'bg-slate-800 border-slate-700 text-amber-400 hover:border-amber-500/50'
+                                                            }`}
+                                                        >
                                                             {idea}
-                                                        </div>
+                                                        </button>
                                                     ))}
                                                 </div>
+                                            </div>
+
+                                            {/* IMAGE GENERATION CONFIG & BUTTON */}
+                                            <div className="bg-slate-800/40 p-6 rounded-xl border border-slate-700 space-y-6">
+                                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+                                                <div>
+                                                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Model</label>
+                                                  <select
+                                                    value={imageModel}
+                                                    onChange={(e) => setImageModel(e.target.value as any)}
+                                                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                                                  >
+                                                    <option value="gemini-2.5-flash-image">Gemini Flash (Nhanh)</option>
+                                                    <option value="gemini-3-pro-image-preview">Gemini Pro (Chất lượng cao)</option>
+                                                  </select>
+                                                </div>
+                                                <div>
+                                                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Kích Thước</label>
+                                                  <select
+                                                    value={imageSize}
+                                                    onChange={(e) => setImageSize(e.target.value as any)}
+                                                    disabled={imageModel !== 'gemini-3-pro-image-preview'}
+                                                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 text-xs focus:ring-2 focus:ring-amber-500 outline-none disabled:opacity-30"
+                                                  >
+                                                    <option value="1K">1K (1024x1024+)</option>
+                                                    <option value="2K">2K (2048x2048+)</option>
+                                                    <option value="4K">4K (Siêu nét)</option>
+                                                  </select>
+                                                </div>
+                                                <div>
+                                                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Tỷ Lệ</label>
+                                                  <select
+                                                    value={aspectRatio}
+                                                    onChange={(e) => setAspectRatio(e.target.value as any)}
+                                                    className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-slate-300 text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                                                  >
+                                                    <option value="16:9">16:9 (YouTube)</option>
+                                                    <option value="9:16">9:16 (Shorts/TikTok)</option>
+                                                    <option value="1:1">1:1 (Square)</option>
+                                                    <option value="4:3">4:3 (Standard)</option>
+                                                    <option value="3:4">3:4 (Portrait)</option>
+                                                  </select>
+                                                </div>
+                                              </div>
+
+                                              <button
+                                                onClick={handleGenerateThumbnailImage}
+                                                disabled={isGeneratingThumbnailImage}
+                                                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-white font-bold rounded-xl shadow-lg shadow-amber-900/20 transition-all disabled:opacity-50"
+                                              >
+                                                {isGeneratingThumbnailImage ? (
+                                                  <span className="flex items-center gap-2">
+                                                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+                                                    Đang tạo ảnh bằng AI...
+                                                  </span>
+                                                ) : (
+                                                  <>
+                                                    <BrushIcon />
+                                                    Tạo Ảnh Thumbnail {selectedThumbnailText ? 'Kèm Chữ' : ''}
+                                                  </>
+                                                )}
+                                              </button>
+
+                                              {thumbnailImageError && <ErrorDisplay message={thumbnailImageError} />}
+
+                                              {generatedThumbnailUrl && (
+                                                <div className="mt-6 animate-scale-in">
+                                                  <div className="relative group rounded-xl overflow-hidden border-2 border-amber-500/30">
+                                                    <img 
+                                                      src={generatedThumbnailUrl} 
+                                                      alt="AI Generated Thumbnail" 
+                                                      className="w-full h-auto object-cover transition-transform duration-700 group-hover:scale-105"
+                                                    />
+                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                                                      <a 
+                                                        href={generatedThumbnailUrl} 
+                                                        download="thumbnail.png"
+                                                        className="px-6 py-2 bg-white text-black font-bold rounded-full text-sm hover:bg-amber-100 transition-colors"
+                                                      >
+                                                        Tải Ảnh Xuống
+                                                      </a>
+                                                    </div>
+                                                  </div>
+                                                  <p className="text-center text-[10px] text-slate-500 mt-2">Nhấp chuột phải để lưu hoặc nhấn nút tải xuống.</p>
+                                                </div>
+                                              )}
                                             </div>
                                         </div>
                                     </section>

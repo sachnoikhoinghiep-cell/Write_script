@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { analyzeTranscript, translateResult, extractContentFromUrl } from './services/geminiService';
 import type { AnalysisResult } from './types';
 import { Header } from './components/Header';
@@ -19,6 +19,12 @@ const App: React.FC = () => {
   const [loadingMessage, setLoadingMessage] = useState<string>('Đang phân tích...');
   const [error, setError] = useState<string | null>(null);
 
+  // YouTube API States
+  const [youtubeApiKey, setYoutubeApiKey] = useState<string>('');
+  const [isYoutubeApiValidated, setIsYoutubeApiValidated] = useState<boolean>(false);
+  const [isCheckingYoutubeApi, setIsCheckingYoutubeApi] = useState<boolean>(false);
+  const [userIp, setUserIp] = useState<string | null>(null);
+
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [translatedResult, setTranslatedResult] = useState<AnalysisResult | null>(null);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
@@ -27,18 +33,86 @@ const App: React.FC = () => {
 
   const [scriptWriterInput, setScriptWriterInput] = useState<{ result: AnalysisResult; language: string } | null>(null);
 
-  const isUrl = (text: string) => {
+  // Lấy IP người dùng và kiểm tra session đã lưu
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const response = await fetch('https://api.ipify.org?format=json');
+        const data = await response.json();
+        const currentIp = data.ip;
+        setUserIp(currentIp);
+
+        const savedKey = localStorage.getItem('yt_api_key');
+        const savedIp = localStorage.getItem('yt_last_ip');
+
+        if (savedKey && savedIp === currentIp) {
+          setYoutubeApiKey(savedKey);
+          setIsYoutubeApiValidated(true);
+        } else if (savedIp && savedIp !== currentIp) {
+          // IP đã thay đổi, yêu cầu nhập lại
+          localStorage.removeItem('yt_api_key');
+          localStorage.removeItem('yt_last_ip');
+          setYoutubeApiKey('');
+          setIsYoutubeApiValidated(false);
+        }
+      } catch (err) {
+        console.error("Không thể lấy IP người dùng:", err);
+      }
+    };
+    checkSession();
+  }, []);
+
+  const isUrl = useCallback((text: string) => {
     try {
       const url = new URL(text.trim());
       return url.protocol === "http:" || url.protocol === "https:";
     } catch (_) {
       return false;
     }
-  };
+  }, []);
+
+  const isYoutubeUrl = useMemo(() => {
+    if (!isUrl(transcript)) return false;
+    const url = transcript.trim().toLowerCase();
+    return url.includes('youtube.com') || url.includes('youtu.be');
+  }, [transcript, isUrl]);
+
+  const handleValidateYoutubeApi = useCallback(async () => {
+    if (!youtubeApiKey.trim()) return;
+    
+    setIsCheckingYoutubeApi(true);
+    setError(null);
+    
+    try {
+      // Giả lập kiểm tra API Key
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
+      if (youtubeApiKey.length < 30) {
+        throw new Error("API Key YouTube không hợp lệ. Vui lòng kiểm tra lại.");
+      }
+      
+      setIsYoutubeApiValidated(true);
+      
+      // Lưu vào localStorage kèm IP hiện tại
+      localStorage.setItem('yt_api_key', youtubeApiKey);
+      if (userIp) {
+        localStorage.setItem('yt_last_ip', userIp);
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setIsCheckingYoutubeApi(false);
+    }
+  }, [youtubeApiKey, userIp]);
 
   const handleAnalyze = useCallback(async () => {
     if (!transcript.trim()) {
       setError('Vui lòng nhập bản ghi hoặc liên kết trước khi phân tích.');
+      return;
+    }
+
+    if (isYoutubeUrl && !isYoutubeApiValidated) {
+      setError('Vui lòng xác nhận API YouTube trước khi tiếp tục phân tích video.');
       return;
     }
 
@@ -66,7 +140,7 @@ const App: React.FC = () => {
       setIsLoading(false);
       setLoadingMessage('Đang phân tích...');
     }
-  }, [transcript]);
+  }, [transcript, isYoutubeUrl, isYoutubeApiValidated, isUrl]);
 
   const handleTranslate = useCallback(async () => {
     if (!result) return;
@@ -107,9 +181,18 @@ const App: React.FC = () => {
         <main className="mt-8">
           <TranscriptInput
             transcript={transcript}
-            onTranscriptChange={setTranscript}
+            onTranscriptChange={(val) => {
+              setTranscript(val);
+              // Chỉ reset validation nếu Link không phải Youtube hoặc IP thay đổi (đã check ở effect)
+            }}
             onAnalyze={handleAnalyze}
             isLoading={isLoading}
+            isYoutubeUrl={isYoutubeUrl}
+            youtubeApiKey={youtubeApiKey}
+            onYoutubeApiKeyChange={setYoutubeApiKey}
+            isYoutubeApiValidated={isYoutubeApiValidated}
+            isCheckingYoutubeApi={isCheckingYoutubeApi}
+            onValidateYoutubeApi={handleValidateYoutubeApi}
           />
 
           {error && <ErrorDisplay message={error} />}
