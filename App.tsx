@@ -85,7 +85,7 @@ const App: React.FC = () => {
     setError(null);
     
     try {
-      // Giả lập kiểm tra API Key
+      // Giả lập kiểm tra API Key (Trong tương lai có thể thực hiện gọi API YouTube thực sự tại đây)
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       if (youtubeApiKey.length < 30) {
@@ -127,16 +127,23 @@ const App: React.FC = () => {
       let contentToAnalyze = transcript;
 
       if (isUrl(transcript)) {
-        setLoadingMessage('Đang trích xuất nội dung từ liên kết...');
-        contentToAnalyze = await extractContentFromUrl(transcript.trim());
+        setLoadingMessage('Đang cố gắng trích xuất nội dung từ liên kết...');
+        try {
+          contentToAnalyze = await extractContentFromUrl(transcript.trim());
+        } catch (extractErr: any) {
+          // Nếu trích xuất tự động thất bại, hiển thị lỗi rõ ràng hơn
+          setError(extractErr.message);
+          setIsLoading(false);
+          return;
+        }
       }
 
-      setLoadingMessage('Đang phân tích chủ đề...');
+      setLoadingMessage('Đang phân tích chủ đề và điểm cốt lõi...');
       const analysis = await analyzeTranscript(contentToAnalyze);
       setResult(analysis);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || 'Đã xảy ra lỗi. Vui lòng thử lại.');
+      setError(err.message || 'Đã xảy ra lỗi không xác định. Vui lòng thử lại.');
     } finally {
       setIsLoading(false);
       setLoadingMessage('Đang phân tích...');
@@ -184,7 +191,6 @@ const App: React.FC = () => {
             transcript={transcript}
             onTranscriptChange={(val) => {
               setTranscript(val);
-              // Chỉ reset validation nếu Link không phải Youtube hoặc IP thay đổi (đã check ở effect)
             }}
             onAnalyze={handleAnalyze}
             isLoading={isLoading}

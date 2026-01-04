@@ -29,6 +29,44 @@ const responseSchema = {
 };
 
 /**
+ * Trích xuất nội dung từ URL (YouTube, Blog, Website) sử dụng Google Search Grounding
+ * Sử dụng Gemini 3 Pro để tối ưu hóa khả năng sử dụng công cụ tìm kiếm.
+ */
+export const extractContentFromUrl = async (url: string): Promise<string> => {
+  try {
+    const ai = getAIClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-3-pro-preview", // Nâng cấp lên Pro để có khả năng Search tốt hơn
+      contents: `Bạn là một chuyên gia trích xuất dữ liệu. 
+      NHIỆM VỤ: Hãy truy cập và đọc nội dung của liên kết này: ${url}
+      
+      HƯỚNG DẪN CHI TIẾT:
+      1. Nếu là video YouTube: Hãy tìm kiếm bản ghi lời thoại (transcript) hoặc mô tả chi tiết nội dung video. 
+      2. Nếu là bài viết/blog: Hãy trích xuất toàn bộ nội dung văn bản chính.
+      3. Bạn CẦN sử dụng công cụ Google Search để lấy dữ liệu mới nhất nếu không thể truy cập trực tiếp.
+      4. Chỉ trả về nội dung văn bản thuần túy (Plain Text), không thêm lời dẫn hay giải thích.
+      5. Nếu video có giới hạn hoặc không có transcript công khai, hãy tóm tắt nội dung dựa trên dữ liệu tìm kiếm được từ tiêu đề và mô tả video.`,
+      config: {
+        tools: [{ googleSearch: {} }],
+        temperature: 0.1,
+      },
+    });
+
+    const extractedText = response.text;
+    
+    if (!extractedText || extractedText.length < 50) {
+       throw new Error("Nội dung trích xuất quá ngắn hoặc không khả dụng.");
+    }
+
+    return extractedText;
+  } catch (error: any) {
+    console.error("Error extracting content from URL:", error);
+    // Cung cấp thông báo lỗi chi tiết hơn để người dùng biết cách xử lý
+    throw new Error(`[Lỗi Trích Xuất]: AI không thể tự động lấy dữ liệu từ link này do hạn chế của trang web hoặc chính sách bảo mật của YouTube. \n\nCÁCH KHẮC PHỤC:\n1. Hãy dán trực tiếp kịch bản (transcript) vào ô văn bản.\n2. Kiểm tra xem video có bản phụ đề (CC) công khai không.`);
+  }
+};
+
+/**
  * Tạo hình ảnh thumbnail từ prompt
  */
 export const generateThumbnailImage = async (
@@ -66,29 +104,6 @@ export const generateThumbnailImage = async (
   } catch (error) {
     console.error("Error generating image:", error);
     throw error;
-  }
-};
-
-/**
- * Trích xuất nội dung từ URL (YouTube, Blog, Website) sử dụng Google Search Grounding
- */
-export const extractContentFromUrl = async (url: string): Promise<string> => {
-  try {
-    const ai = getAIClient();
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Hãy truy cập liên kết sau và trích xuất toàn bộ nội dung kịch bản (transcript) hoặc nội dung văn bản chính của bài viết: ${url}. 
-      Nếu là video YouTube, hãy lấy bản ghi lời thoại. Nếu là bài viết blog/website, hãy lấy nội dung bài viết. 
-      Chỉ trả về nội dung văn bản thuần túy, không kèm giải thích.`,
-      config: {
-        tools: [{ googleSearch: {} }],
-      },
-    });
-
-    return response.text || "Không thể trích xuất nội dung từ liên kết này.";
-  } catch (error) {
-    console.error("Error extracting content from URL:", error);
-    throw new Error("Không thể truy cập hoặc trích xuất nội dung từ liên kết. Vui lòng kiểm tra lại quyền truy cập của trang web hoặc dán trực tiếp văn bản.");
   }
 };
 
