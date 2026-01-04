@@ -9,11 +9,14 @@ import { LoadingSpinner } from './components/LoadingSpinner';
 import { ErrorDisplay } from './components/ErrorDisplay';
 import { ScriptWriter } from './components/ScriptWriter';
 import { Footer } from './components/Footer';
+import { SetupScreen } from './components/SetupScreen';
 
 type View = 'main' | 'scriptWriter';
 
 const App: React.FC = () => {
   const [view, setView] = useState<View>('main');
+  const [isConfigured, setIsConfigured] = useState<boolean>(false);
+  const [isAppLoading, setIsAppLoading] = useState<boolean>(true);
   
   const [transcript, setTranscript] = useState<string>('');
   const [isLoading, setIsLoading] = useState<boolean>(false);
@@ -22,8 +25,6 @@ const App: React.FC = () => {
 
   // YouTube API States
   const [youtubeApiKey, setYoutubeApiKey] = useState<string>('');
-  const [isYoutubeApiValidated, setIsYoutubeApiValidated] = useState<boolean>(false);
-  const [isCheckingYoutubeApi, setIsCheckingYoutubeApi] = useState<boolean>(false);
   const [userIp, setUserIp] = useState<string | null>(null);
 
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -46,18 +47,24 @@ const App: React.FC = () => {
         const savedKey = localStorage.getItem('yt_api_key');
         const savedIp = localStorage.getItem('yt_last_ip');
 
+        // Nếu có key và IP không đổi, bỏ qua màn hình setup
         if (savedKey && savedIp === currentIp) {
           setYoutubeApiKey(savedKey);
-          setIsYoutubeApiValidated(true);
+          setIsConfigured(true);
         } else if (savedIp && savedIp !== currentIp) {
-          // IP đã thay đổi, yêu cầu nhập lại
+          // IP đã thay đổi, xóa sạch session để bảo mật
           localStorage.removeItem('yt_api_key');
           localStorage.removeItem('yt_last_ip');
-          setYoutubeApiKey('');
-          setIsYoutubeApiValidated(false);
+          setIsConfigured(false);
+        } else {
+          setIsConfigured(false);
         }
       } catch (err) {
         console.error("Không thể lấy IP người dùng:", err);
+        // Nếu không lấy được IP, vẫn cho phép setup nhưng không lưu IP check
+        setIsConfigured(localStorage.getItem('yt_api_key') ? true : false);
+      } finally {
+        setIsAppLoading(false);
       }
     };
     checkSession();
@@ -78,42 +85,14 @@ const App: React.FC = () => {
     return url.includes('youtube.com') || url.includes('youtu.be');
   }, [transcript, isUrl]);
 
-  const handleValidateYoutubeApi = useCallback(async () => {
-    if (!youtubeApiKey.trim()) return;
-    
-    setIsCheckingYoutubeApi(true);
-    setError(null);
-    
-    try {
-      // Giả lập kiểm tra API Key (Trong tương lai có thể thực hiện gọi API YouTube thực sự tại đây)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      if (youtubeApiKey.length < 30) {
-        throw new Error("API Key YouTube không hợp lệ. Vui lòng kiểm tra lại.");
-      }
-      
-      setIsYoutubeApiValidated(true);
-      
-      // Lưu vào localStorage kèm IP hiện tại
-      localStorage.setItem('yt_api_key', youtubeApiKey);
-      if (userIp) {
-        localStorage.setItem('yt_last_ip', userIp);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsCheckingYoutubeApi(false);
-    }
-  }, [youtubeApiKey, userIp]);
+  const handleSetupComplete = (key: string) => {
+    setYoutubeApiKey(key);
+    setIsConfigured(true);
+  };
 
   const handleAnalyze = useCallback(async () => {
     if (!transcript.trim()) {
       setError('Vui lòng nhập bản ghi hoặc liên kết trước khi phân tích.');
-      return;
-    }
-
-    if (isYoutubeUrl && !isYoutubeApiValidated) {
-      setError('Vui lòng xác nhận API YouTube trước khi tiếp tục phân tích video.');
       return;
     }
 
@@ -129,10 +108,8 @@ const App: React.FC = () => {
       if (isUrl(transcript)) {
         setLoadingMessage('Đang cố gắng trích xuất nội dung từ liên kết...');
         try {
-          // Truyền youtubeApiKey để hỗ trợ trích xuất tốt hơn
-          contentToAnalyze = await extractContentFromUrl(transcript.trim(), isYoutubeApiValidated ? youtubeApiKey : undefined);
+          contentToAnalyze = await extractContentFromUrl(transcript.trim(), youtubeApiKey);
         } catch (extractErr: any) {
-          // Nếu trích xuất tự động thất bại, hiển thị lỗi rõ ràng hơn
           setError(extractErr.message);
           setIsLoading(false);
           return;
@@ -149,7 +126,7 @@ const App: React.FC = () => {
       setIsLoading(false);
       setLoadingMessage('Đang phân tích...');
     }
-  }, [transcript, isYoutubeUrl, isYoutubeApiValidated, isUrl, youtubeApiKey]);
+  }, [transcript, isUrl, youtubeApiKey]);
 
   const handleTranslate = useCallback(async () => {
     if (!result) return;
@@ -178,7 +155,19 @@ const App: React.FC = () => {
     setView('main');
   }, []);
 
-  // Màn hình ScriptWriter
+  if (isAppLoading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex flex-col items-center justify-center">
+        <LoadingSpinner />
+        <p className="text-indigo-400 mt-4 animate-pulse font-mono text-sm">INITIALIZING AI SYSTEM...</p>
+      </div>
+    );
+  }
+
+  if (!isConfigured) {
+    return <SetupScreen onComplete={handleSetupComplete} currentIp={userIp} />;
+  }
+
   if (view === 'scriptWriter' && scriptWriterInput) {
     return <ScriptWriter input={scriptWriterInput} onBack={handleBackToMain} />;
   }
@@ -190,18 +179,20 @@ const App: React.FC = () => {
         <main className="mt-8">
           <TranscriptInput
             transcript={transcript}
-            onTranscriptChange={(val) => {
-              setTranscript(val);
-            }}
+            onTranscriptChange={setTranscript}
             onAnalyze={handleAnalyze}
             isLoading={isLoading}
             isYoutubeUrl={isYoutubeUrl}
-            youtubeApiKey={youtubeApiKey}
-            onYoutubeApiKeyChange={setYoutubeApiKey}
-            isYoutubeApiValidated={isYoutubeApiValidated}
-            isCheckingYoutubeApi={isCheckingYoutubeApi}
-            onValidateYoutubeApi={handleValidateYoutubeApi}
           />
+
+          <div className="mt-4 flex justify-end">
+            <button 
+              onClick={() => setIsConfigured(false)}
+              className="text-[10px] uppercase tracking-widest font-bold text-slate-600 hover:text-indigo-400 transition-colors"
+            >
+              Thiết lập lại API
+            </button>
+          </div>
 
           {error && <ErrorDisplay message={error} />}
 

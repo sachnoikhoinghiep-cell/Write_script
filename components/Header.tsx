@@ -5,12 +5,12 @@ export const Header: React.FC = () => {
   /**
    * PH: Phiên Bản
    * v: Version
-   * 004: Số thứ tự cập nhật
+   * 005: Số thứ tự cập nhật
    * 04: Ngày
    * 01: Tháng
    * 2026: Năm
    */
-  const APP_VERSION = "PH.v.004.04.01.2026";
+  const APP_VERSION = "PH.v.005.04.01.2026";
 
   return (
     <header className="text-center relative pt-4">
