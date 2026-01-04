@@ -1,0 +1,5 @@
+{
+  "name": "YouTube Transcript Analyzer - Viết kịch Bản",
+  "description": "An AI-powered tool to analyze YouTube video transcripts. Users can paste a transcript, and the application will use Gemini to extract the main topic and key points, with options to easily copy the results.",
+  "requestFramePermissions": []
+}
