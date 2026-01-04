@@ -1,20 +1,28 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
 
-# Run and deploy your AI Studio app
+# YouTube Transcript Analyzer & Script Writer
 
-This contains everything you need to run your app locally.
+Một ứng dụng mạnh mẽ sử dụng trí tuệ nhân tạo (Gemini API) để phân tích bản ghi video YouTube, trích xuất chủ đề, dịch thuật, viết kịch bản motivational và tạo hình ảnh AI tự động.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1rlIjPmHcPBwri9qAYLH_Ob8lhjpvmjhM
+## Phiên Bản Hiện Tại
+`PH.v.002.04.01.2026`
 
-## Run Locally
+## Tính Năng Chính
+- **Phân tích thông minh**: Trích xuất chủ đề chính và các điểm cốt lõi từ transcript hoặc URL.
+- **Biên tập chuyên nghiệp**: Tự động viết kịch bản kể chuyện motivational dựa trên nội dung phân tích.
+- **Tạo ảnh AI hàng loạt**: Tạo hàng loạt hình ảnh minh họa cho câu chuyện theo nhiều phong cách nghệ thuật (Studio Ghibli, Cyberpunk, Thủy mặc...).
+- **Tải xuống ZIP**: Gom tất cả ảnh đã tạo vào file ZIP với chất lượng nguyên bản (no compression).
+- **Tối ưu SEO**: Gợi ý tiêu đề, mô tả, hashtags và keywords viral cho YouTube.
+- **Bảo mật API**: Lưu trữ phiên làm việc của YouTube API Key dựa trên IP người dùng.
 
-**Prerequisites:**  Node.js
+## Quyền Sử Dụng (Usage Rights)
+Dự án này là **mã nguồn mở (Open Source)**.
+Khi đồng bộ hóa lên GitHub hoặc bất kỳ nền tảng lưu trữ mã nguồn nào, người dùng được cấp **toàn quyền sử dụng**, bao gồm nhưng không giới hạn ở:
+- Sử dụng cho mục đích cá nhân hoặc thương mại.
+- Sửa đổi, tối ưu hóa và phát triển thêm tính năng.
+- Sao chép và phân phối lại mã nguồn theo giấy phép MIT.
 
+## Cài Đặt
+Ứng dụng được xây dựng dựa trên React và Gemini AI SDK. Đảm bảo bạn có `API_KEY` của Google AI Studio để vận hành.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+---
+*Phát triển bởi đội ngũ đam mê sáng tạo nội dung AI.*

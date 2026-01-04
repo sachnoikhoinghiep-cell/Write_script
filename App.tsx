@@ -8,6 +8,7 @@ import { ResultDisplay } from './components/ResultDisplay';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { ErrorDisplay } from './components/ErrorDisplay';
 import { ScriptWriter } from './components/ScriptWriter';
+import { Footer } from './components/Footer';
 
 type View = 'main' | 'scriptWriter';
 
@@ -176,7 +177,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-slate-200 font-sans flex flex-col items-center p-4 sm:p-6 lg:p-8">
-      <div className="w-full max-w-4xl mx-auto">
+      <div className="w-full max-w-4xl mx-auto flex-grow">
         <Header />
         <main className="mt-8">
           <TranscriptInput
@@ -220,6 +221,7 @@ const App: React.FC = () => {
           )}
         </main>
       </div>
+      <Footer />
     </div>
   );
 };
