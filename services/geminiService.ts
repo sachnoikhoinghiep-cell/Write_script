@@ -29,64 +29,22 @@ const responseSchema = {
 };
 
 /**
- * Trích xuất ID video từ URL YouTube
- */
-const getYoutubeVideoId = (url: string): string | null => {
-  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[7].length === 11) ? match[7] : null;
-};
-
-/**
- * Lấy thông tin video cơ bản từ YouTube Data API nếu có API Key
- */
-const fetchYoutubeMetadata = async (url: string, apiKey: string): Promise<{title: string, description: string} | null> => {
-  const videoId = getYoutubeVideoId(url);
-  if (!videoId || !apiKey) return null;
-
-  try {
-    const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${videoId}&key=${apiKey}`);
-    const data = await response.json();
-    if (data.items && data.items.length > 0) {
-      return {
-        title: data.items[0].snippet.title,
-        description: data.items[0].snippet.description
-      };
-    }
-  } catch (error) {
-    console.error("Lỗi khi gọi YouTube API:", error);
-  }
-  return null;
-};
-
-/**
  * Trích xuất nội dung từ URL (YouTube, Blog, Website) sử dụng Google Search Grounding
+ * Đã gỡ bỏ YouTube Data API để tối ưu hóa tính tiện dụng.
  */
-export const extractContentFromUrl = async (url: string, ytApiKey?: string): Promise<string> => {
+export const extractContentFromUrl = async (url: string): Promise<string> => {
   try {
     const ai = getAIClient();
     
-    // Thử lấy thêm context từ YouTube API nếu là link YouTube
-    let contextInfo = "";
-    if (url.includes('youtube.com') || url.includes('youtu.be')) {
-      if (ytApiKey) {
-        const metadata = await fetchYoutubeMetadata(url, ytApiKey);
-        if (metadata) {
-          contextInfo = `\nTHÔNG TIN VIDEO TỪ API:\nTiêu đề: ${metadata.title}\nMô tả: ${metadata.description.slice(0, 500)}...`;
-        }
-      }
-    }
-
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
       contents: `Bạn là một chuyên gia trích xuất kịch bản và nội dung số. 
       NHIỆM VỤ: Hãy trích xuất toàn bộ nội dung hoặc bản ghi lời thoại (transcript) từ liên kết: ${url}
-      ${contextInfo}
       
       HƯỚNG DẪN CHI TIẾT:
-      1. SỬ DỤNG GOOGLE SEARCH: Nếu không thể truy cập trực tiếp URL, hãy dùng công cụ Tìm kiếm để tìm "transcript" hoặc "lyrics" hoặc "full text" của video/bài viết này trên các trang web bên thứ ba (như youtubetranscript.com, các blog review, v.v.).
-      2. NẾU LÀ VIDEO: Hãy tìm kịch bản chính xác nhất. Nếu không tìm thấy transcript, hãy dựa vào tiêu đề và mô tả video để tạo ra một bản tóm tắt nội dung cực kỳ chi tiết (ít nhất 500 từ).
-      3. CHẤT LƯỢNG: Ưu tiên trả về nội dung lời thoại đầy đủ nếu có thể.
+      1. SỬ DỤNG GOOGLE SEARCH: Bạn có quyền truy cập Internet. Hãy tìm kiếm chính xác tiêu đề, mô tả và quan trọng nhất là "transcript" (bản ghi lời thoại) của video/liên kết này.
+      2. NGUỒN DỮ LIỆU: Tìm kiếm trên các trang web lưu trữ transcript công khai hoặc các bài blog tóm tắt nội dung video này.
+      3. NẾU LÀ VIDEO: Hãy cố gắng tái hiện lại nội dung chính xác nhất dựa trên dữ liệu tìm kiếm được.
       4. ĐỊNH DẠNG: Chỉ trả về nội dung văn bản chính, không thêm lời dẫn của AI.`,
       config: {
         tools: [{ googleSearch: {} }],
@@ -97,18 +55,16 @@ export const extractContentFromUrl = async (url: string, ytApiKey?: string): Pro
     const extractedText = response.text;
     
     if (!extractedText || extractedText.length < 100) {
-       throw new Error("Nội dung trích xuất quá ngắn hoặc không khả dụng để phân tích.");
+       throw new Error("Nội dung trích xuất không đủ để phân tích.");
     }
 
     return extractedText;
   } catch (error: any) {
     console.error("Error extracting content from URL:", error);
-    throw new Error(`[Lỗi Trích Xuất]: Hệ thống không thể tự động lấy bản ghi từ YouTube (có thể do video chặn bot hoặc chạy trên GitHub Pages bị giới hạn).
+    throw new Error(`[Lỗi Trích Xuất]: AI không thể tự động lấy bản ghi từ link này. 
     
-CÁCH KHẮC PHỤC HIỆU QUẢ NHẤT:
-1. Mở video YouTube, nhấn vào biểu tượng "..." (Thêm) -> "Hiển thị bản ghi lời thoại" (Show transcript).
-2. Sao chép toàn bộ văn bản đó và dán trực tiếp vào ô nhập liệu bên trên.
-3. Nhấn "Bắt đầu phân tích" để tiếp tục.`);
+CÁCH KHẮC PHỤC:
+Vui lòng mở video YouTube, sao chép bản ghi (transcript) thủ công và dán trực tiếp vào ô nhập liệu.`);
   }
 };
 

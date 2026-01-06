@@ -344,7 +344,7 @@ ${seoResult.thumbnailTextIdeas.map(idea => `- ${idea}`).join('\n')}
                         id="duration"
                         type="range"
                         min="1"
-                        max="30"
+                        max="60"
                         step="1"
                         value={duration}
                         onChange={(e) => setDuration(Number(e.target.value))}
@@ -353,7 +353,7 @@ ${seoResult.thumbnailTextIdeas.map(idea => `- ${idea}`).join('\n')}
                     />
                      <div className="flex justify-between text-xs text-slate-500 mt-1">
                         <span>1 phút</span>
-                        <span>30 phút</span>
+                        <span>60 phút</span>
                     </div>
                 </div>
 
@@ -369,7 +369,7 @@ ${seoResult.thumbnailTextIdeas.map(idea => `- ${idea}`).join('\n')}
                             className="flex-grow px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-slate-200 focus:ring-2 focus:ring-purple-500 focus:border-purple-500 transition-all duration-200"
                             disabled={isLoading}
                         >
-                            {[1, 2, 3, 4, 5, 6].map((num) => (
+                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map((num) => (
                                 <option key={num} value={num}>
                                     {num} Phần
                                 </option>
