@@ -30,7 +30,6 @@ const responseSchema = {
 
 /**
  * Trích xuất nội dung từ URL (YouTube, Blog, Website) sử dụng Google Search Grounding
- * Đã gỡ bỏ YouTube Data API để tối ưu hóa tính tiện dụng.
  */
 export const extractContentFromUrl = async (url: string): Promise<string> => {
   try {
@@ -199,50 +198,49 @@ export const generateScript = async (
             const isLastPart = partIndex === numberOfParts;
 
             let prompt = `
-            You are an inspirational storyteller. Your task is to write a motivational story in the language: **${language}**.
-            The story should be told from the perspective of a single narrator, perfect for a text-to-speech application.
-            
-            Base the story on the following topic and key points.
-            - **Topic:** ${translatedResult.topic}
-            - **Key Points:** ${translatedResult.keyPoints.map(p => `\n  - ${p}`).join('')}
+            Bạn là một người kể chuyện truyền cảm hứng chuyên nghiệp. Nhiệm vụ của bạn là viết một câu chuyện motivational bằng ngôn ngữ: **${language}**.
+            Câu chuyện phải được kể dưới góc nhìn của một người dẫn chuyện duy nhất, phù hợp để chuyển thành giọng đọc AI (TTS).
 
-            **STRUCTURE & TIMING:**
-            - This is **Part ${partIndex}** of a ${numberOfParts}-part series.
-            - Total Series Duration: ${totalDuration} minutes.
-            - **Time Allocation for THIS part:** ${durationPerPart.toFixed(1)} minutes.
-            - **Target Word Count:** approximately **${wordCount}** words.
-            
-            Please strictly adhere to the pacing. Since this is Part ${partIndex} of ${numberOfParts}, ensure the narrative flow is appropriate for this section of the overall story.
+            Dựa trên chủ đề và các điểm cốt lõi sau:
+            - **Chủ đề:** ${translatedResult.topic}
+            - **Các điểm chính:** ${translatedResult.keyPoints.map(p => `\n  - ${p}`).join('')}
+
+            **CẤU TRÚC VÀ THỜI LƯỢNG:**
+            - Đây là một phần trong loạt câu chuyện dài tổng cộng ${totalDuration} phút.
+            - **Thời lượng cho ĐOẠN NÀY:** ${durationPerPart.toFixed(1)} phút.
+            - **Số lượng từ mục tiêu:** khoảng **${wordCount}** từ.
+
+            **QUY TẮC QUAN TRỌNG VỀ CHUYỂN CẢNH (HÀNH ĐỘNG BẮT BUỘC):**
+            1. KHÔNG ĐƯỢC phép sử dụng các cụm từ như "Chào mừng đến với phần...", "Đây là phần...", "Phần tiếp theo...", hoặc bất kỳ từ ngữ nào ám chỉ cấu trúc kỹ thuật của kịch bản.
+            2. CHUYỂN TIẾP TỰ NHIÊN: Đoạn văn phải nối tiếp mạch cảm xúc và logic từ đoạn trước đó một cách vô hình. Người nghe không nên nhận ra kịch bản đang được chia thành nhiều phần.
+            3. LIÊN KẾT MẠCH LẠC: Kết thúc đoạn này phải mở ra một ý niệm hoặc cảm xúc dẫn dắt tự nhiên vào ý tưởng tiếp theo.
+            4. NGÔN NGỮ: Sử dụng ngôn từ giàu hình ảnh, nhịp điệu và cảm xúc.
             `;
 
             if (isFirstPart) {
                 prompt += `
-                **INSTRUCTIONS FOR PART 1 (Opening):**
-                1.  **Opening Hook:** Start with a powerful, captivating hook.
-                2.  **Introduction:** Introduce the narrative/characters/theme clearly.
-                3.  **Format:** Continuous narrative text. No script format.
-                4.  **Character Names:** Change any names to be culturally appropriate for **${language}**.
-                `;
-            } else if (isLastPart) {
-                prompt += `
-                **INSTRUCTIONS FOR PART ${partIndex} (Conclusion):**
-                1.  **Continuity:** Continue seamlessly from the previous part.
-                2.  **Previous Context:** 
-                    ---
-                    ${previousContext.slice(-2000)} 
-                    ---
-                3.  **Resolution:** Bring the story to a powerful, satisfying conclusion.
+                **HƯỚNG DẪN CHO ĐOẠN MỞ ĐẦU:**
+                - Bắt đầu bằng một câu "hook" mạnh mẽ, gây ấn tượng ngay lập tức.
+                - Dẫn dắt người nghe vào bối cảnh hoặc chủ đề một cách tinh tế.
+                - Định hình phong cách kể chuyện cho toàn bộ câu chuyện.
                 `;
             } else {
                 prompt += `
-                **INSTRUCTIONS FOR PART ${partIndex} (Middle):**
-                1.  **Continuity:** Continue seamlessly from the previous part.
-                2.  **Previous Context:** 
-                    ---
-                    ${previousContext.slice(-2000)} 
-                    ---
-                3.  **Development:** Deepen the story.
+                **HƯỚNG DẪN CHO SỰ TIẾP NỐI (ĐOẠN ${partIndex}):**
+                - Dựa trên nội dung đã kể trước đó:
+                  ---
+                  ${previousContext.slice(-2000)} 
+                  ---
+                - Bắt đầu đoạn này bằng cách tiếp nối trực tiếp hành động hoặc suy nghĩ đang dang dở ở đoạn trước.
+                - Tuyệt đối không nhắc lại những gì đã nói, chỉ phát triển thêm.
                 `;
+
+                if (isLastPart) {
+                    prompt += `
+                    **HƯỚNG DẪN KẾT THÚC:**
+                    - Đưa câu chuyện đến cao trào cảm xúc và kết thúc bằng một thông điệp đắt giá, lay động lòng người.
+                    `;
+                }
             }
 
             const response = await ai.models.generateContent({
@@ -279,9 +277,10 @@ export const translateStory = async (scriptParts: string[], targetLanguage: stri
             You are a professional literary translator.
             Translate the following story part into **${targetLanguage}**.
 
-            **CRITICAL INSTRUCTION: LOCALIZATION**
+            **CRITICAL INSTRUCTION: LOCALIZATION & FLOW**
             - **Character Names:** You MUST change all character names to be culturally authentic and common for **${targetLanguage}**.
             - **Consistency:** Ensure you use the EXACT SAME localized names as in the previous parts.
+            - **Seamlessness:** Do not add any "Part X" headings. The translation must flow naturally from the previous section.
             `;
 
             if (previousTranslatedContext) {
@@ -292,12 +291,12 @@ export const translateStory = async (scriptParts: string[], targetLanguage: stri
             }
 
             prompt += `
-            **TEXT TO TRANSLATE (Part ${i + 1}):**
+            **TEXT TO TRANSLATE:**
             ${part}
 
             **OUTPUT:**
             - Provide ONLY the translated narrative text.
-            - Do not include notes or explanations.
+            - Do not include notes, part numbers, or explanations.
             `;
 
             const response = await ai.models.generateContent({
