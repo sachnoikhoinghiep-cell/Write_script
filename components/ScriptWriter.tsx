@@ -168,7 +168,8 @@ export const ScriptWriter: React.FC<ScriptWriterProps> = ({ input, onBack }) => 
 
     let finalPrompt = seoResult.thumbnailPrompt;
     if (selectedThumbnailText) {
-      finalPrompt += `. Add the text "${selectedThumbnailText}" in a high-impact, bold, cinematic font as a central element of the image. The text should be clearly readable and integrated into the ${selectedStyle} aesthetic.`;
+      // Cập nhật prompt để đảm bảo chữ in đậm, to rõ, không chân và màu sắc tương phản
+      finalPrompt += `. CRITICAL: Add the text "${selectedThumbnailText}" as a central focal point. The text MUST use an extremely bold, extra-large, and clear SANS-SERIF font (font không chân). Use HIGH-CONTRAST colors for the text (e.g., vibrant yellow or pure white with a thick black drop shadow or dark stroke) to ensure perfect legibility against the background. The typography should be professional, cinematic, and dominant, perfectly integrated into the ${selectedStyle} aesthetic.`;
     }
 
     try {
