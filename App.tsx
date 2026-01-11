@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { analyzeTranscript, translateResult, extractContentFromUrl } from './services/geminiService';
 import type { AnalysisResult } from './types';
 import { Header } from './components/Header';
@@ -43,8 +43,9 @@ const App: React.FC = () => {
     return url.includes('youtube.com') || url.includes('youtu.be');
   }, [transcript, isUrl]);
 
-  const handleAnalyze = useCallback(async () => {
-    if (!transcript.trim()) {
+  const handleAnalyze = useCallback(async (customInput?: string) => {
+    const inputToUse = customInput || transcript;
+    if (!inputToUse.trim()) {
       setError('Vui lòng nhập bản ghi hoặc liên kết trước khi phân tích.');
       return;
     }
@@ -56,12 +57,12 @@ const App: React.FC = () => {
     setTranslationError(null);
 
     try {
-      let contentToAnalyze = transcript;
+      let contentToAnalyze = inputToUse;
 
-      if (isUrl(transcript)) {
+      if (isUrl(inputToUse)) {
         setLoadingMessage('Đang cố gắng trích xuất nội dung từ liên kết...');
         try {
-          contentToAnalyze = await extractContentFromUrl(transcript.trim());
+          contentToAnalyze = await extractContentFromUrl(inputToUse.trim());
         } catch (extractErr: any) {
           setError(extractErr.message);
           setIsLoading(false);
@@ -108,6 +109,12 @@ const App: React.FC = () => {
     setView('main');
   }, []);
 
+  const handleSelectSuggestedTopic = useCallback((topic: string) => {
+    setTranscript(topic);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    handleAnalyze(topic);
+  }, [handleAnalyze]);
+
   if (view === 'scriptWriter' && scriptWriterInput) {
     return <ScriptWriter input={scriptWriterInput} onBack={handleBackToMain} />;
   }
@@ -120,7 +127,7 @@ const App: React.FC = () => {
           <TranscriptInput
             transcript={transcript}
             onTranscriptChange={setTranscript}
-            onAnalyze={handleAnalyze}
+            onAnalyze={() => handleAnalyze()}
             isLoading={isLoading}
             isYoutubeUrl={isYoutubeUrl}
           />
@@ -145,6 +152,7 @@ const App: React.FC = () => {
                 onLanguageChange={setTargetLanguage}
                 translationError={translationError}
                 onGoToScriptWriter={handleGoToScriptWriter}
+                onSelectSuggestedTopic={handleSelectSuggestedTopic}
               />
             </div>
           )}

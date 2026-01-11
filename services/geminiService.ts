@@ -15,17 +15,28 @@ const responseSchema = {
   properties: {
     topic: {
       type: Type.STRING,
-      description: "Chủ đề chính của video.",
+      description: "Chủ đề chính của video hoặc văn bản.",
+    },
+    topicType: {
+      type: Type.STRING,
+      description: "Phân loại kiểu chủ đề (ví dụ: Động lực, Giáo dục, Tin tức, Kỹ năng, v.v.).",
     },
     keyPoints: {
       type: Type.ARRAY,
-      description: "Danh sách các điểm chính hoặc nội dung cốt lõi từ video.",
+      description: "Danh sách các điểm chính từ transcript HOẶC Dàn ý chi tiết (Outline) nếu là phát triển chủ đề.",
       items: {
         type: Type.STRING,
       },
     },
+    suggestedTopics: {
+      type: Type.ARRAY,
+      description: "Danh sách 5 chủ đề tiếp theo liên quan hoặc mở rộng từ nội dung này.",
+      items: {
+        type: Type.STRING,
+      },
+    }
   },
-  required: ['topic', 'keyPoints'],
+  required: ['topic', 'topicType', 'keyPoints', 'suggestedTopics'],
 };
 
 /**
@@ -108,18 +119,37 @@ export const generateThumbnailImage = async (
   }
 };
 
-export const analyzeTranscript = async (transcript: string): Promise<AnalysisResult> => {
+export const analyzeTranscript = async (input: string): Promise<AnalysisResult> => {
   try {
     const ai = getAIClient();
+    const isShortInput = input.trim().length < 300 && !input.includes('\n\n');
+
+    let systemPrompt = '';
+    if (isShortInput) {
+      systemPrompt = `Dưới đây là một CHỦ ĐỀ hoặc TIÊU ĐỀ ngắn. 
+      Nhiệm vụ của bạn là:
+      1. Xác định đây là kiểu chủ đề gì (topicType).
+      2. Xây dựng một DÀN Ý CHI TIẾT (keyPoints) để phát triển chủ đề này thành một kịch bản video hấp dẫn và có chiều sâu.
+      3. Đề xuất 5 chủ đề liên quan.
+      
+      Nội dung: "${input}"`;
+    } else {
+      systemPrompt = `Phân tích bản ghi video hoặc nội dung văn bản sau đây. 
+      Nhiệm vụ của bạn là:
+      1. Xác định chủ đề chính (topic).
+      2. Xác định kiểu nội dung/chủ đề này thuộc loại nào (topicType).
+      3. Trích xuất các điểm cốt lõi quan trọng (keyPoints).
+      4. Đề xuất 5 chủ đề liên quan.
+      
+      Nội dung:
+      ---
+      ${input}
+      ---`;
+    }
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Phân tích bản ghi video hoặc nội dung văn bản sau đây và cung cấp chủ đề chính cùng danh sách các điểm cốt lõi.
-
-      **Nội dung:**
-      ---
-      ${transcript}
-      ---
-      `,
+      contents: systemPrompt,
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
@@ -137,18 +167,24 @@ export const analyzeTranscript = async (transcript: string): Promise<AnalysisRes
     return parsedResult as AnalysisResult;
   } catch (error) {
     console.error("Error calling Gemini API:", error);
-    throw new Error("Failed to analyze transcript. Please check the API response and your configuration.");
+    throw new Error("Failed to analyze input. Please check the API response and your configuration.");
   }
 };
 
 export const translateResult = async (result: AnalysisResult, targetLanguage: string): Promise<AnalysisResult> => {
-  const prompt = `Translate the following topic and key points into ${targetLanguage}. Maintain the original meaning and structure.
+  const prompt = `Translate the following topic information into ${targetLanguage}. Maintain the original meaning and structure.
 
   **Topic to translate:**
   ${result.topic}
 
-  **Key Points to translate:**
+  **Topic Type to translate:**
+  ${result.topicType || ''}
+
+  **Key Points/Outline to translate:**
   ${result.keyPoints.map(p => `- ${p}`).join('\n')}
+
+  **Suggested Topics to translate:**
+  ${result.suggestedTopics?.map(p => `- ${p}`).join('\n') ?? ''}
 
   Respond ONLY with the JSON object.
   `;
@@ -203,7 +239,8 @@ export const generateScript = async (
 
             Dựa trên chủ đề và các điểm cốt lõi sau:
             - **Chủ đề:** ${translatedResult.topic}
-            - **Các điểm chính:** ${translatedResult.keyPoints.map(p => `\n  - ${p}`).join('')}
+            - **Kiểu chủ đề:** ${translatedResult.topicType || 'Chưa xác định'}
+            - **Dàn ý/Điểm chính:** ${translatedResult.keyPoints.map(p => `\n  - ${p}`).join('')}
 
             **CẤU TRÚC VÀ THỜI LƯỢNG:**
             - Đây là một phần trong loạt câu chuyện dài tổng cộng ${totalDuration} phút.
