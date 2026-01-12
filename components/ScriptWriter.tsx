@@ -18,6 +18,22 @@ const ART_STYLES = [
   { id: 'cyberpunk', name: 'Cyberpunk 2077 Aesthetic', description: 'Tương lai u tối, đèn neon rực rỡ, độ tương phản cao, phong cách viễn tưởng.' },
 ];
 
+/**
+ * Loại bỏ dấu tiếng Việt và ký tự đặc biệt để làm tên file
+ */
+const slugify = (str: string) => {
+  if (!str) return "";
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .trim()
+    .replace(/\s+/g, '_')
+    .toLowerCase();
+};
+
 interface ScriptWriterProps {
   input: {
     result: AnalysisResult;
@@ -247,8 +263,8 @@ export const ScriptWriter: React.FC<ScriptWriterProps> = ({ input, onBack }) => 
       const downloadUrl = URL.createObjectURL(zipContent);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      // Đặt tên file ZIP theo chủ đề (slugify)
-      const fileName = result.topic.toLowerCase().slice(0, 30).replace(/[^a-z0-9]/g, '_') || 'story_images';
+      // Đặt tên file ZIP theo chủ đề (đã xóa dấu)
+      const fileName = slugify(result.topic).slice(0, 50) || 'story_images';
       link.download = `${fileName}_images.zip`;
       document.body.appendChild(link);
       link.click();
@@ -900,7 +916,7 @@ ${seoResult.thumbnailTextIdeas.map(idea => `- ${idea}`).join('\n')}
                                                     <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                                                       <a 
                                                         href={generatedThumbnailUrl} 
-                                                        download="thumbnail.png"
+                                                        download={`${slugify(selectedThumbnailText) || 'thumbnail'}.png`}
                                                         className="px-6 py-2 bg-white text-black font-bold rounded-full text-sm hover:bg-amber-100 transition-colors"
                                                       >
                                                         Tải Ảnh Xuống
