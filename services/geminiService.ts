@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, Modality } from "@google/genai";
 import type { AnalysisResult, SEOResult } from '../types';
 
 const getAIClient = () => {
@@ -115,6 +115,40 @@ export const generateThumbnailImage = async (
     throw new Error("Không tìm thấy dữ liệu hình ảnh trong phản hồi.");
   } catch (error) {
     console.error("Error generating image:", error);
+    throw error;
+  }
+};
+
+/**
+ * Tạo giọng nói (TTS) từ văn bản
+ * Cập nhật: Thêm style để đảm bảo tông giọng đồng nhất
+ */
+export const generateAudio = async (text: string, voiceName: string = 'Kore', style: string = 'Calm'): Promise<string> => {
+  try {
+    const ai = getAIClient();
+    // Prepend style hint to ensure consistency in tone
+    const styledText = `Say this in a ${style} tone: ${text}`;
+    
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: styledText }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName },
+          },
+        },
+      },
+    });
+
+    const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+    if (!base64Audio) {
+      throw new Error("Không tìm thấy dữ liệu âm thanh trong phản hồi API.");
+    }
+    return base64Audio;
+  } catch (error) {
+    console.error("Error generating audio:", error);
     throw error;
   }
 };
